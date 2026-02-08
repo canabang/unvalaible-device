@@ -6,14 +6,19 @@
 
 # --- CAPTEUR MAÎTRE (INVENTAIRE & ACTIVITÉ) ---
 - trigger:
+    # ┌─────────────────────────────────────────────────────────────────────────┐
+    # │  ⚠️  ADAPTEZ LE TOPIC MQTT CI-DESSOUS À VOTRE INSTALLATION Z2M  ⚠️     │
+    # │      Remplacez "zigbee2mqtt02" par votre préfixe (ex: "zigbee2mqtt")    │
+    # └─────────────────────────────────────────────────────────────────────────┘
+    
     # 1. Mise à jour de l'inventaire complet (Rare : seulement si changement d'appairage)
     - platform: mqtt
-      topic: zigbee2mqtt02/bridge/devices
+      topic: zigbee2mqtt02/bridge/devices  # ◄── TOPIC 1/2 À MODIFIER
       id: inventory
     
-    # 2. Écoute du trafic pour marquer la présence (Last Seen) - NOUVEAU
+    # 2. Écoute du trafic pour marquer la présence (Last Seen)
     - platform: mqtt
-      topic: zigbee2mqtt02/+
+      topic: zigbee2mqtt02/+  # ◄── TOPIC 2/2 À MODIFIER
       id: traffic
     
     # 3. Rafraîchissement manuel
@@ -42,12 +47,11 @@
           {% set registry = this.attributes.last_seen_registry | default({}) %}
           {% if trigger.id == 'traffic' %}
             {% set dev_name = trigger.topic.split('/')[1] %}
-            {# On capture le timestamp si disponible (format Z2M standard pour last_seen) #}
+            {# Priorité au last_seen du payload, sinon fallback sur now() #}
             {% if trigger.payload_json is defined and trigger.payload_json.last_seen is defined %}
-              {# Mise à jour du dictionnaire avec le nom et le timestamp #}
               {{ dict(registry, **{dev_name: trigger.payload_json.last_seen}) }}
             {% else %}
-              {{ registry }}
+              {{ dict(registry, **{dev_name: now().isoformat()}) }}
             {% endif %}
           {% else %}
             {{ registry }}
