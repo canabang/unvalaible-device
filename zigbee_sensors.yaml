@@ -1,101 +1,186 @@
 
-# Surveillance enrichie des devices Zigbee sur batterie
-# Ce capteur centralise les données MQTT de Z2M et les croise avec les états Home Assistant
+# --------------------------------------------------------------------------------------
+# MONITORING ZIGBEE 3.0 (Mode V3 : Centralisé & Optimisé)
 # Dossier : monitoring-zigbee
+# --------------------------------------------------------------------------------------
 
+# --- CAPTEUR MAÎTRE (INVENTAIRE & ACTIVITÉ) ---
 - trigger:
+    # 1. Mise à jour de l'inventaire complet (Rare : seulement si changement d'appairage)
     - platform: mqtt
       topic: zigbee2mqtt02/bridge/devices
+      id: inventory
+    
+    # 2. Écoute du trafic pour marquer la présence (Last Seen) - NOUVEAU
+    - platform: mqtt
+      topic: zigbee2mqtt02/+
+      id: traffic
+    
+    # 3. Rafraîchissement manuel
     - platform: state
       entity_id: button.actualiser_monitoring_zigbee
+      id: force_refresh
+
   sensor:
     - name: "Z2M Battery Devices"
       unique_id: z2m_battery_devices
       state: >
-        {# On compte le nombre total d'appareils identifiés comme étant sur batterie #}
-        {% set devices = trigger.payload | from_json if trigger.platform == 'mqtt' else state_attr('sensor.z2m_battery_devices', 'raw_devices') | default([]) %}
-        {{ devices | selectattr('power_source', 'defined') | selectattr('power_source', 'eq', 'Battery') | list | length }}
+        {# On ne touche à l'état (nombre de batteries) QUE si changement d'inventaire #}
+        {% if trigger.id == 'traffic' %}
+          {{ this.state }}
+        {% else %}
+          {% set devices = trigger.payload | from_json if trigger.platform == 'mqtt' else state_attr('sensor.z2m_battery_devices', 'raw_devices') | default([]) %}
+          {{ devices | selectattr('power_source', 'defined') | selectattr('power_source', 'eq', 'Battery') | list | length }}
+        {% endif %}
       icon: mdi:battery-check
       attributes:
         last_check: "{{ now().isoformat() }}"
-        # Stockage de la liste brute pour permettre le refresh manuel sans MQTT
+        
+        # --- CARNET DE BORD (Traffic Listener) ---
+        # Ce dictionnaire stocke l'heure de dernier passage pour chaque appareil qui parle
+        last_seen_registry: >
+          {% set registry = this.attributes.last_seen_registry | default({}) %}
+          {% if trigger.id == 'traffic' %}
+            {% set dev_name = trigger.topic.split('/')[1] %}
+            {# On capture le timestamp si disponible (format Z2M standard pour last_seen) #}
+            {% if trigger.payload_json is defined and trigger.payload_json.last_seen is defined %}
+              {# Mise à jour du dictionnaire avec le nom et le timestamp #}
+              {{ dict(registry, **{dev_name: trigger.payload_json.last_seen}) }}
+            {% else %}
+              {{ registry }}
+            {% endif %}
+          {% else %}
+            {{ registry }}
+          {% endif %}
+
+        # --- ARBRE DES APPAREILS (Inventory) ---
+        # FIX V4: Liste ALLÉGÉE (sans icônes/bindings/clusters) pour éviter limite 16KB
         raw_devices: >
-          {{ trigger.payload | from_json if trigger.platform == 'mqtt' else state_attr('sensor.z2m_battery_devices', 'raw_devices') | default([]) }}
+          {% if trigger.id == 'traffic' %}
+            {{ this.attributes.raw_devices }}
+          {% elif trigger.platform == 'mqtt' and trigger.payload is defined %}
+            {% set full_list = trigger.payload | from_json %}
+            {% set ns = namespace(light=[]) %}
+            {% for d in full_list %}
+              {% set ns.light = ns.light + [{
+                'friendly_name': d.friendly_name,
+                'ieee_address': d.ieee_address | default(''),
+                'type': d.type | default('Unknown'),
+                'power_source': d.power_source | default('Unknown'),
+                'description': d.description | default(''),
+                'model': d.model_id | default('')
+              }] %}
+            {% endfor %}
+            {{ ns.light }}
+          {% elif this.attributes.raw_devices is defined and this.attributes.raw_devices is not none %}
+            {{ this.attributes.raw_devices }}
+          {% else %}
+            []
+          {% endif %}
         
         devices: >
-          {# 1. Récupération de la liste brute des appareils sur batterie #}
-          {% set raw = trigger.payload | from_json if trigger.platform == 'mqtt' else state_attr('sensor.z2m_battery_devices', 'raw_devices') | default([]) %}
-          {% set devices = raw | selectattr('power_source', 'defined') | selectattr('power_source', 'eq', 'Battery') | list %}
-          {% set enriched = namespace(list=[]) %}
-          
-          {# 2. Boucle pour enrichir chaque appareil avec des données temps réel de Home Assistant #}
-          {% for d in devices %}
-            {# Extraction de la date de maintenance de la description Z2M (ex: "pile 01/01/2024") #}
-            {% set desc = d.description | default('') %}
-            {% set m_date = desc if ('pile' in desc or '/' in desc) else 'jamais' %}
+          {% if trigger.id == 'traffic' %}
+            {{ this.attributes.devices }}
+          {% else %}
+            {# 1. Récupération de la liste brute des appareils sur batterie #}
+            {% set raw = trigger.payload | from_json if trigger.platform == 'mqtt' else state_attr('sensor.z2m_battery_devices', 'raw_devices') | default([]) %}
+            {% set devices = raw | selectattr('power_source', 'defined') | selectattr('power_source', 'eq', 'Battery') | list %}
+            {% set enriched = namespace(list=[]) %}
             
-            {# Préparation du nom pour la recherche d'entité (en minuscule pour éviter les fautes de frappe) #}
-            {% set search_name = d.friendly_name | lower %}
-            
-            {# STRATÉGIE DE RECHERCHE D'ENTITÉ (MATCHING) AMÉLIORÉE #}
-            
-            {# Essai 1 : Priorité absolue si l'entité finit par "_battery" (standard Z2M) #}
-            {% set batt_entity = states.sensor 
-              | selectattr('attributes.device_class', 'defined') 
-              | selectattr('attributes.device_class', 'eq', 'battery')
-              | selectattr('entity_id', 'search', search_name ~ '_battery$')
-              | first | default(none) %}
-
-            {# Essai 2 : Si échec, recherche large dans l'ID #}
-            {% if batt_entity is none %}
+            {# 2. Boucle pour enrichir chaque appareil avec des données temps réel de Home Assistant #}
+            {% for d in devices %}
+              {# Extraction de la date de maintenance de la description Z2M (ex: "pile 01/01/2024") #}
+              {% set desc = d.description | default('') %}
+              {% set m_date = desc if ('pile' in desc or '/' in desc) else 'jamais' %}
+              
+              {# FIX V7: Conversion espaces -> underscores pour matcher les entity_id HA #}
+              {% set search_name = d.friendly_name | lower | replace(' ', '_') %}
+              
+              {# STRATÉGIE DE RECHERCHE D'ENTITÉ (MATCHING) AMÉLIORÉE #}
+              
+              {# Essai 1 : Priorité absolue si l'entité finit par "_battery" (standard Z2M) #}
               {% set batt_entity = states.sensor 
                 | selectattr('attributes.device_class', 'defined') 
                 | selectattr('attributes.device_class', 'eq', 'battery')
-                | selectattr('entity_id', 'search', search_name)
+                | selectattr('entity_id', 'search', search_name ~ '_battery$')
                 | first | default(none) %}
-            {% endif %}
-            
-            {# Essai 3 : Si échec, recherche par le friendly_name Home Assistant #}
-            {% if batt_entity is none %}
-              {% set batt_entity = states.sensor 
-                | selectattr('attributes.device_class', 'defined') 
-                | selectattr('attributes.device_class', 'eq', 'battery')
-                | selectattr('attributes.friendly_name', 'defined')
-                | selectattr('attributes.friendly_name', 'search', d.friendly_name)
-                | first | default(none) %}
-            {% endif %}
+  
+              {# Essai 2 : Si échec, recherche large dans l'ID #}
+              {% if batt_entity is none %}
+                {% set batt_entity = states.sensor 
+                  | selectattr('attributes.device_class', 'defined') 
+                  | selectattr('attributes.device_class', 'eq', 'battery')
+                  | selectattr('entity_id', 'search', search_name)
+                  | first | default(none) %}
+              {% endif %}
+              
+              {# Essai 3 : Si échec, recherche par le friendly_name Home Assistant #}
+              {% if batt_entity is none %}
+                {% set batt_entity = states.sensor 
+                  | selectattr('attributes.device_class', 'defined') 
+                  | selectattr('attributes.device_class', 'eq', 'battery')
+                  | selectattr('attributes.friendly_name', 'defined')
+                  | selectattr('attributes.friendly_name', 'search', d.friendly_name)
+                  | first | default(none) %}
+              {% endif %}
+              
+              {# FIX V6: Essai 4 - Recherche entités _battery SANS device_class #}
+              {% if batt_entity is none %}
+                {% set batt_entity = states.sensor 
+                  | selectattr('entity_id', 'search', search_name ~ '_battery')
+                  | first | default(none) %}
+              {% endif %}
 
-            {# Essai 4 : Recherche de n'importe quelle entité liée à ce nom pour le statut Online/Offline #}
-            {% if batt_entity is none %}
-               {% set any_entity = states.sensor 
-                 | selectattr('entity_id', 'search', search_name)
-                 | first | default(states.binary_sensor | selectattr('entity_id', 'search', search_name) | first | default(none)) %}
-            {% else %}
-               {% set any_entity = batt_entity %}
-            {% endif %}
+              {# Essai 5 : Recherche de n'importe quelle entité liée à ce nom pour le statut Online/Offline #}
+              {% if batt_entity is none %}
+                 {% set any_entity = states.sensor 
+                   | selectattr('entity_id', 'search', search_name)
+                   | first | default(states.binary_sensor | selectattr('entity_id', 'search', search_name) | first | default(none)) %}
+              {% else %}
+                 {% set any_entity = batt_entity %}
+              {% endif %}
+              
+              {# 3. Création de l'objet final pour cet appareil #}
+              {# FIX V5: Gestion des batteries textuelles (low/medium/high) #}
+              {% set batt_val = '?' %}
+              {% if batt_entity is not none %}
+                {% if batt_entity.state | is_number %}
+                  {% set batt_val = batt_entity.state %}
+                {% elif batt_entity.state | lower == 'high' %}
+                  {% set batt_val = '~90' %}
+                {% elif batt_entity.state | lower == 'medium' %}
+                  {% set batt_val = '~50' %}
+                {% elif batt_entity.state | lower == 'low' %}
+                  {% set batt_val = '~10' %}
+                {% else %}
+                  {% set batt_val = batt_entity.state %}
+                {% endif %}
+              {% endif %}
+              {% set enriched.list = enriched.list + [{
+                'name': d.friendly_name,
+                'status': 'offline' if (any_entity is none or any_entity.state == 'unavailable') else 'online',
+                'battery': batt_val,
+                'maintenance': m_date,
+                'entity_debug': any_entity.entity_id if any_entity is not none else 'non trouvé'
+              }] %}
+            {% endfor %}
             
-            {# 3. Création de l'objet final pour cet appareil #}
-            {% set enriched.list = enriched.list + [{
-              'name': d.friendly_name,
-              'status': 'offline' if (any_entity is none or any_entity.state == 'unavailable') else 'online',
-              'battery': batt_entity.state if (batt_entity is not none and batt_entity.state | is_number) else '?',
-              'maintenance': m_date,
-              'entity_debug': any_entity.entity_id if any_entity is not none else 'non trouvé'
-            }] %}
-          {% endfor %}
-          
-          {# Renvoyer la liste triée par nom pour l'affichage #}
-          {{ enriched.list | sort(attribute='name') }}
+            {# Renvoyer la liste triée par nom pour l'affichage #}
+            {{ enriched.list | sort(attribute='name') }}
+          {% endif %}
 
+# --- CAPTEUR D'ALERTE (BATTERIES) ---
 - sensor:
     - name: "Zigbee Battery Alerts"
       unique_id: zigbee_battery_alerts
       state: >
         {# Ce capteur compte les devices nécessitant une attention (Offline, Pile < 15% ou Inconnue) #}
+        {# FIX V5: Gestion des valeurs ~90/~50/~10 pour batteries textuelles #}
         {% set devices = state_attr('sensor.z2m_battery_devices', 'devices') | default([]) %}
         {% set alerts = namespace(count=0) %}
         {% for d in devices %}
-          {% set battery_val = d.battery | float(-1) if d.battery != '?' else -1 %}
+          {% set batt_str = d.battery | string %}
+          {% set battery_val = batt_str | replace('~', '') | float(-1) if batt_str != '?' else -1 %}
           {% if d.status == 'offline' or d.battery == '?' or (battery_val != -1 and battery_val < 15) %}
             {% set alerts.count = alerts.count + 1 %}
           {% endif %}
@@ -105,17 +190,69 @@
         {{ 'mdi:alert-circle' if states('sensor.zigbee_battery_alerts') | int(0) > 0 else 'mdi:check-circle' }}
       attributes:
         # Liste filtrée pour l'automation et le dashboard
+        # FIX V5: Gestion des valeurs ~90/~50/~10
         alert_devices: >
           {% set devices = state_attr('sensor.z2m_battery_devices', 'devices') | default([]) %}
           {% set list = namespace(items=[]) %}
           {% for d in devices %}
-            {% set battery_val = d.battery | float(-1) if d.battery != '?' else -1 %}
+            {% set batt_str = d.battery | string %}
+            {% set battery_val = batt_str | replace('~', '') | float(-1) if batt_str != '?' else -1 %}
             {% if d.status == 'offline' or d.battery == '?' or (battery_val != -1 and battery_val < 15) %}
               {% set list.items = list.items + [d] %}
             {% endif %}
           {% endfor %}
           {{ list.items }}
 
+# --- CAPTEUR RÉSEAU (DISPONIBILITÉ / ONLINE) ---
+# Ce capteur lit le registre LastSeen du maître pour déclarer les morts
+- trigger:
+    - platform: time_pattern
+      minutes: "/15"
+    - platform: state
+      entity_id: button.actualiser_monitoring_zigbee
+  
+  sensor:
+    - name: "Z2M Network Monitor"
+      unique_id: z2m_network_monitor
+      icon: mdi:zigbee-status
+      state: >
+        {{ this.attributes.offline_count | default(0) }}
+      attributes:
+        last_check: "{{ now().isoformat() }}"
+        offline_list: >
+          {# Seuil configurable : 25h par défaut #}
+          {% set threshold_hours = 25 %} 
+          {% set master = 'sensor.z2m_battery_devices' %}
+          {# On récupère le fameux registre rempli par le trafic MQTT #}
+          {% set registry = state_attr(master, 'last_seen_registry') | default({}) %}
+          {% set raw_devices = state_attr(master, 'raw_devices') %}
+          {% set ns = namespace(dead=[]) %}
+          
+          {% if raw_devices %}
+            {% for d in raw_devices %}
+              {% if d.type != 'Coordinator' and d.definition != None %}
+                {% set name = d.friendly_name %}
+                {% set last_seen = registry.get(name) %}
+                
+                {% if last_seen %}
+                  {% set delta = (as_timestamp(now()) - as_timestamp(last_seen)) / 3600 %}
+                  {% if delta > threshold_hours %}
+                    {% set ns.dead = ns.dead + [{
+                      "name": name, 
+                      "last_seen": last_seen,
+                      "hours_ago": delta | round(1)
+                    }] %}
+                  {% endif %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+          {{ ns.dead | sort(attribute='hours_ago', reverse=True) }}
+
+        offline_count: >
+          {{ this.attributes.offline_list | count if this.attributes.offline_list is defined else 0 }}
+
+# --- BOUTON DE RAFRAÎCHISSEMENT ---
 - button:
   - name: "Actualiser Monitoring Zigbee"
     unique_id: force_zigbee_refresh_btn
