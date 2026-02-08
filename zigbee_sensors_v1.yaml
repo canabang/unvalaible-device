@@ -80,8 +80,8 @@
             {% set desc = d.description | default('') %}
             {% set m_date = desc if ('pile' in desc or '/' in desc) else 'jamais' %}
             
-            {# Préparation du nom pour la recherche d'entité (en minuscule pour éviter les fautes de frappe) #}
-            {% set search_name = d.friendly_name | lower %}
+            {# FIX V7: Conversion espaces -> underscores pour matcher les entity_id HA #}
+            {% set search_name = d.friendly_name | lower | replace(' ', '_') %}
             
             {# STRATÉGIE DE RECHERCHE D'ENTITÉ (MATCHING) AMÉLIORÉE #}
             
