@@ -12,11 +12,13 @@
     - name: "Z2M Battery Devices"
       unique_id: z2m_battery_devices
       state: >
-        {# FIX V2: Protection contre None ET undefined #}
-        {% if trigger.platform == 'mqtt' %}
+        {# FIX V3: Triple protection #}
+        {% if trigger.platform == 'mqtt' and trigger.payload is defined %}
           {% set devices = trigger.payload | from_json %}
+        {% elif this.attributes.raw_devices is defined and this.attributes.raw_devices is not none %}
+          {% set devices = this.attributes.raw_devices %}
         {% else %}
-          {% set devices = this.attributes.raw_devices if this.attributes.raw_devices is not none else [] %}
+          {% set devices = [] %}
         {% endif %}
         {% if devices | length > 0 %}
           {{ devices | selectattr('power_source', 'defined') | selectattr('power_source', 'eq', 'Battery') | list | length }}
@@ -26,21 +28,36 @@
       icon: mdi:battery-check
       attributes:
         last_check: "{{ now().isoformat() }}"
+        
+        # DEBUG: Pour diagnostiquer le problème du bouton
+        _debug_trigger: >
+          {
+            "platform": "{{ trigger.platform }}",
+            "has_payload": {{ 'true' if trigger.payload is defined else 'false' }},
+            "has_raw_devices": {{ 'true' if this.attributes.raw_devices is defined else 'false' }},
+            "raw_devices_is_none": {{ 'true' if this.attributes.raw_devices is none else 'false' }},
+            "raw_devices_length": {{ this.attributes.raw_devices | length if this.attributes.raw_devices is not none else -1 }}
+          }
+        
         # Stockage de la liste brute pour permettre le refresh manuel sans MQTT
-        # FIX V2: Protection explicite contre None
+        # FIX V3: Triple protection + ne rien faire si pas de données MQTT sur trigger state
         raw_devices: >
-          {% if trigger.platform == 'mqtt' %}
+          {% if trigger.platform == 'mqtt' and trigger.payload is defined %}
             {{ trigger.payload | from_json }}
+          {% elif this.attributes.raw_devices is defined and this.attributes.raw_devices is not none %}
+            {{ this.attributes.raw_devices }}
           {% else %}
-            {{ this.attributes.raw_devices if this.attributes.raw_devices is not none else [] }}
+            []
           {% endif %}
         
         devices: >
-          {# FIX V2: Protection explicite contre None #}
-          {% if trigger.platform == 'mqtt' %}
+          {# FIX V3: Triple protection #}
+          {% if trigger.platform == 'mqtt' and trigger.payload is defined %}
             {% set raw = trigger.payload | from_json %}
+          {% elif this.attributes.raw_devices is defined and this.attributes.raw_devices is not none %}
+            {% set raw = this.attributes.raw_devices %}
           {% else %}
-            {% set raw = this.attributes.raw_devices if this.attributes.raw_devices is not none else [] %}
+            {% set raw = [] %}
           {% endif %}
           {% set devices = raw | selectattr('power_source', 'defined') | selectattr('power_source', 'eq', 'Battery') | list %}
           {% set enriched = namespace(list=[]) %}
