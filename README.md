@@ -168,6 +168,58 @@ Ce projet a été testé avec différentes configurations et inclut des correcti
 | `zigbee_sensors.yaml` | Capteurs principaux (inventaire, alertes, réseau) |
 | `dashboard_card.yaml` | Carte dashboard pour les batteries |
 | `dashboard_network_card.yaml` | Carte dashboard pour le moniteur réseau |
-| `zigbee_report.yaml` | Automation de rapport journalier |
+| `zigbee_report.yaml` | Automation perso (K-2SO + Discord + Awtrix) |
+| `zigbee_report_simple.yaml` | **Automation simplifiée** (notification persistante HA) |
 | `debug_templates.md` | Templates de diagnostic |
 | `README.md` | Cette documentation |
+
+---
+
+## 🔔 Automation Simplifiée (`zigbee_report_simple.yaml`)
+
+Version sans dépendances externes, utilisant uniquement les **notifications persistantes** de Home Assistant.
+
+### Déclencheurs
+
+| Trigger ID | Quand ? |
+|------------|---------|
+| `scheduled` | Tous les jours à 20h00 |
+| `battery_alert` | Dès qu'une batterie passe sous le seuil |
+| `network_alert` | Dès qu'un appareil devient silencieux |
+
+### Installation
+
+1. Copiez le fichier dans votre dossier `automations/` ou collez le contenu dans l'éditeur d'automatisation.
+2. Rechargez les automatisations.
+
+---
+
+## 🧪 Comment Tester
+
+### Test 1 : Simuler une alerte (Outils de développement > États)
+
+1. Allez dans **Outils de développement > États**
+2. Cherchez `sensor.zigbee_battery_alerts` ou `sensor.z2m_network_monitor`
+3. Changez l'état de `0` à `1`
+4. Cliquez **"Définir l'état"**
+5. L'automation devrait se déclencher immédiatement → notification persistante créée
+
+### Test 2 : Exécuter l'automation manuellement
+
+1. Allez dans **Paramètres > Automatisations**
+2. Trouvez "Zigbee : Rapport Journalier (Simplifié)"
+3. Cliquez sur les 3 points > **Exécuter**
+4. Vérifiez la notification persistante créée
+
+### Test 3 : Vérifier le cas "Tout OK"
+
+1. Dans **Outils de développement > États**, mettez les deux sensors à `0` :
+   - `sensor.zigbee_battery_alerts` = `0`
+   - `sensor.z2m_network_monitor` = `0`
+2. Exécutez l'automation manuellement (voir Test 2)
+3. Vous devriez recevoir une notification "✅ Rapport Zigbee - Tout OK"
+
+> [!TIP]
+> Les notifications persistantes s'empilent (elles ne se remplacent pas).
+> Pour les effacer, cliquez sur "Ignorer" ou allez dans **Notifications** de HA.
+
