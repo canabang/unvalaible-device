@@ -1,0 +1,72 @@
+type: vertical-stack
+cards:
+  - type: markdown
+    title: 📡 Moniteur Réseau Zigbee
+    icon: mdi:zigbee
+    content: >
+      *Dernière vérification : {{ state_attr('sensor.z2m_network_monitor', 'last_check') | as_timestamp | timestamp_custom('%d/%m/%Y %H:%M') }}*
+
+      {% set offline = state_attr('sensor.z2m_network_monitor', 'offline_list') | default([]) %}
+      {% set registry = state_attr('sensor.z2m_battery_devices', 'last_seen_registry') | default({}) %}
+
+      {% if offline | length > 0 %}
+
+      ### 🔴 Appareils Hors-Ligne ({{ offline | length }})
+
+      | Appareil | Dernier signal | Absence |
+
+      | :--- | :---: | :---: |
+
+      {% for d in offline | sort(attribute='hours_ago', reverse=true) -%}
+
+      | **{{ d.name }}** | {{ d.last_seen | as_timestamp | timestamp_custom('%d/%m %H:%M') }} | {{ d.hours_ago | round(0) }}h |
+
+      {% endfor %}
+
+      {% else %}
+
+      ### ✅ Tous les appareils sont en ligne
+
+      {% endif %}
+
+
+      ---
+
+
+      ### 📋 Activité Récente ({{ registry | length }} appareils)
+
+      {% if registry | length > 0 %}
+
+      | Appareil | Dernier signal |
+
+      | :--- | :---: |
+
+      {% for name, ts in (registry.items() | sort(attribute='1', reverse=true))[:10] -%}
+
+      | {{ name }} | {{ ts | as_timestamp | timestamp_custom('%d/%m %H:%M') }} |
+
+      {% endfor %}
+
+      {% if registry | length > 10 %}
+
+      | ... | ({{ registry | length - 10 }} de plus) |
+
+      {% endif %}
+
+      {% else %}
+
+      *En attente de trafic MQTT...*
+
+      {% endif %}
+  - show_name: true
+    show_icon: false
+    type: button
+    entity: button.actualiser_monitoring_zigbee
+    name: Forcer l'Actualisation
+    icon: mdi:refresh
+    tap_action:
+      action: call-service
+      service: button.press
+      target:
+        entity_id: button.actualiser_monitoring_zigbee
+    show_state: true
