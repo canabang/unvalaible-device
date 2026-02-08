@@ -12,10 +12,13 @@
     - name: "Z2M Battery Devices"
       unique_id: z2m_battery_devices
       state: >
-        {# On compte le nombre total d'appareils identifiés comme étant sur batterie #}
-        {# FIX: Utilisation de 'this' pour éviter la perte de données si bouton pressé avant le 1er message MQTT #}
-        {% set devices = trigger.payload | from_json if trigger.platform == 'mqtt' else this.attributes.raw_devices | default([]) %}
-        {% if devices %}
+        {# FIX V2: Protection contre None ET undefined #}
+        {% if trigger.platform == 'mqtt' %}
+          {% set devices = trigger.payload | from_json %}
+        {% else %}
+          {% set devices = this.attributes.raw_devices if this.attributes.raw_devices is not none else [] %}
+        {% endif %}
+        {% if devices | length > 0 %}
           {{ devices | selectattr('power_source', 'defined') | selectattr('power_source', 'eq', 'Battery') | list | length }}
         {% else %}
           {{ this.state | default(0) }}
@@ -24,14 +27,21 @@
       attributes:
         last_check: "{{ now().isoformat() }}"
         # Stockage de la liste brute pour permettre le refresh manuel sans MQTT
-        # FIX: Utilisation de 'this.attributes' au lieu de state_attr()
+        # FIX V2: Protection explicite contre None
         raw_devices: >
-          {{ trigger.payload | from_json if trigger.platform == 'mqtt' else this.attributes.raw_devices | default([]) }}
+          {% if trigger.platform == 'mqtt' %}
+            {{ trigger.payload | from_json }}
+          {% else %}
+            {{ this.attributes.raw_devices if this.attributes.raw_devices is not none else [] }}
+          {% endif %}
         
         devices: >
-          {# 1. Récupération de la liste brute des appareils sur batterie #}
-          {# FIX: Utilisation de 'this.attributes' pour éviter le bug du bouton #}
-          {% set raw = trigger.payload | from_json if trigger.platform == 'mqtt' else this.attributes.raw_devices | default([]) %}
+          {# FIX V2: Protection explicite contre None #}
+          {% if trigger.platform == 'mqtt' %}
+            {% set raw = trigger.payload | from_json %}
+          {% else %}
+            {% set raw = this.attributes.raw_devices if this.attributes.raw_devices is not none else [] %}
+          {% endif %}
           {% set devices = raw | selectattr('power_source', 'defined') | selectattr('power_source', 'eq', 'Battery') | list %}
           {% set enriched = namespace(list=[]) %}
           
