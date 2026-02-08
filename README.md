@@ -4,7 +4,7 @@ Ce projet permet de surveiller l'état de santé de tous vos appareils Zigbee su
 
 ## 📂 Structure du Projet
 
-- `zigbee_sensors.yaml` : Contient les capteurs template.
+- `zigbee_sensors.yaml` : Contient **tous** les capteurs (Batteries + Disponibilité "Radar").
 - `README.md` : Ce fichier de documentation.
 
 ## ⚠️ Pré-requis Important : Topic MQTT
@@ -13,8 +13,10 @@ Le fichier `zigbee_sensors.yaml` est configuré par défaut avec un topic spéci
 - trigger:
     - platform: mqtt
       topic: zigbee2mqtt02/bridge/devices  <-- VÉRIFIEZ CE TOPIC !
+    - platform: mqtt
+      topic: zigbee2mqtt02/+              <-- ET CELUI-CI AUSSI !
 ```
-Si votre installation Zigbee2MQTT utilise le topic par défaut (`zigbee2mqtt`), **vous devez modifier cette ligne** dans le fichier avant l'installation pour mettre : `zigbee2mqtt/bridge/devices`.
+Si votre installation Zigbee2MQTT utilise le topic par défaut (`zigbee2mqtt`), **vous devez modifier ces 2 lignes** avant l'installation pour mettre : `zigbee2mqtt/...`.
 
 ## 🛠️ Installation & Configuration
 
@@ -55,17 +57,26 @@ Home Assistant fusionnera automatiquement tous les fichiers de ce dossier.
 ## ⚙️ Fonctionnement Technique
 
 ### 1. Le Capteur Maître (`sensor.z2m_battery_devices`)
-Ce capteur est **déclenché par MQTT**. Il ne se met à jour que lorsque le bridge Zigbee2MQTT publie la liste de ses appareils (`zigbee2mqtt02/bridge/devices`).
+Ce capteur écoute **deux sources MQTT** :
+1.  `zigbee2mqtt02/bridge/devices` : Pour l'inventaire complet des appareils (déclenché rarement).
+2.  `zigbee2mqtt02/+` : Pour le trafic temps réel (mise à jour de l'attribut `last_seen_registry`).
 
 - **État** : Nombre total d'appareils sur batterie détectés.
-- **Attributs** : Une liste `devices` contenant pour chaque appareil :
-    - `name` : Friendly name Z2M.
-    - `status` : `online` ou `offline` (basé sur l'entité de batterie HA).
-    - `battery` : Niveau en % (récupéré de HA).
-    - `maintenance` : Date extraite de la description Z2M (formant "pile JJ/MM/AAAA").
-    - `entity_debug` : L'ID de l'entité Home Assistant liée (pour vérification).
+- **Attributs clés** :
+    - `last_seen_registry` : Dictionnaire stockant l'heure de dernier passage de chaque appareil qui "parle".
+    - `devices` : Liste enrichie des appareils sur batterie (nom, statut, pile, date maintenance).
+    - `raw_devices` : Données brutes de l'inventaire Z2M.
 
-### 2. Le Capteur d'Alertes (`sensor.zigbee_battery_alerts`)
+### 2. Le Capteur Réseau (`sensor.z2m_network_monitor`)
+Ce capteur analyse `last_seen_registry` pour détecter les appareils "silencieux" depuis trop longtemps.
+
+> [!NOTE]
+> **Pourquoi un trigger `time_pattern` (toutes les 15 min) ?**
+> L'attribut `last_seen_registry` est mis à jour à **chaque message MQTT** (potentiellement des centaines par minute).
+> Sans ce timer, le capteur recalculerait inutilement à chaque message reçu, gaspillant des ressources.
+> Le délai de 15 minutes est un bon compromis entre réactivité et performance.
+
+### 3. Le Capteur d'Alertes (`sensor.zigbee_battery_alerts`)
 Ce capteur filtre la liste du capteur maître pour ne sortir que les appareils nécessitant une intervention humaine.
 
 **Critères d'alerte :**
@@ -107,3 +118,56 @@ Le fichier `zigbee_report.yaml` contient une automation clé en main qui :
 4.  Envoie une notification **Discord** détaillée (avec la liste des appareils) et une alerte visuelle sur **Awtrix**.
 
 ℹ️ *Assurez-vous que ce fichier est bien pris en compte par votre configuration Home Assistant.*
+
+---
+
+## 📡 Carte Réseau (Bonus)
+
+Une carte spécifique pour le moniteur réseau est disponible : `dashboard_network_card.yaml`
+
+Elle affiche :
+- Les appareils **hors-ligne** (non vus depuis 25h+)
+- L'**activité récente** (les 10 derniers appareils ayant parlé)
+
+Pour l'installer, suivez la même procédure que pour `dashboard_card.yaml`.
+
+---
+
+## 🧪 Templates de Debug
+
+Le fichier `debug_templates.md` contient des templates prêts à copier/coller dans **Outils de développement > Modèle** pour diagnostiquer le système :
+
+| Template | Utilité |
+|----------|---------|
+| 1. Vérification Globale | Aperçu rapide du système complet |
+| 2. Raw Devices | Vérifie l'inventaire allégé |
+| 3. Batteries | Vérifie la détection des entités |
+| 4. Moniteur Réseau | Vérifie le registre last_seen |
+| 5. Debug Appareil | Recherche un appareil spécifique |
+| 6. Alertes | Liste les alertes actives |
+
+---
+
+## 🔧 Compatibilité
+
+Ce projet a été testé avec différentes configurations et inclut des corrections pour :
+
+| Correction | Description |
+|------------|-------------|
+| **Limite 16KB** | L'attribut `raw_devices` est allégé (sans icônes/bindings) |
+| **Batteries textuelles** | Les valeurs `low`/`medium`/`high` sont converties en `~10`/`~50`/`~90` |
+| **Entités sans device_class** | Recherche élargie des capteurs batterie |
+| **Noms avec espaces** | Conversion automatique `espaces → underscores` pour matcher les entity_id |
+
+---
+
+## 📂 Liste des Fichiers
+
+| Fichier | Description |
+|---------|-------------|
+| `zigbee_sensors.yaml` | Capteurs principaux (inventaire, alertes, réseau) |
+| `dashboard_card.yaml` | Carte dashboard pour les batteries |
+| `dashboard_network_card.yaml` | Carte dashboard pour le moniteur réseau |
+| `zigbee_report.yaml` | Automation de rapport journalier |
+| `debug_templates.md` | Templates de diagnostic |
+| `README.md` | Cette documentation |
