@@ -66,13 +66,21 @@ template: !include templates.yaml
 Copiez simplement tout le contenu de `zigbee_sensors.yaml` et collez-le à la fin de votre fichier `templates.yaml`.  
 Aucune indentation supplémentaire n'est nécessaire (respectez juste l'alignement des tirets existants).
 
-### Méthode 3 : Configuration Découpée « Merge List » (Expert)
-C'est la méthode recommandée pour garder une configuration propre. Si vous avez ceci :
+### Méthode 3 : Configuration Découpée « Merge List » (Recommandée)
+C'est la méthode recommandée pour garder une configuration propre et évolutive.
+
+**Pourquoi choisir cette méthode ?**
+- ✅ **Modularité** : Chaque fichier = une fonctionnalité (facile à activer/désactiver)
+- ✅ **Lisibilité** : Plus besoin de chercher dans un fichier monolithique
+- ✅ **Collaboration** : Copiez simplement les fichiers d'un projet GitHub
+- ✅ **Maintenance** : Mises à jour indépendantes par fichier
+
+Si vous avez ceci dans `configuration.yaml` :
 ```yaml
 template: !include_dir_merge_list templates/
 ```
-1.  Créez un dossier `templates/` (s'il n'existe pas).
-2.  Collez le fichier `zigbee_sensors.yaml` dans ce dossier.
+1. Créez un dossier `templates/` (s'il n'existe pas).
+2. Collez le fichier `zigbee_sensors.yaml` dans ce dossier.
 
 > **Astuce de Migration** :
 > Si vous migrez de la Méthode 2 vers la Méthode 3, vous pouvez simplement déplacer votre fichier `templates.yaml` existant vers le dossier `templates/`.
@@ -118,30 +126,46 @@ Pour que la date de changement de pile s'affiche :
 4. Le capteur se mettra à jour automatiquement à la prochaine publication du bridge.
 
 ## 🔄 Comment forcer une actualisation ?
-Un bouton **"Actualiser Monitoring Zigbee"** est créé automatiquement via le fichier `zigbee_sensors.yaml`.
-Il est intégré directement dans la carte Dashboard fournie (voir section suivante).
 
-En cliquant dessus, vous forcez le recalcul immédiat des capteurs. Vous pouvez vérifier l'action en observant l'attribut `last_check` du capteur `sensor.z2m_battery_devices` qui change à chaque appui.
+Un bouton **"Actualiser Monitoring Zigbee"** est créé automatiquement via le fichier `zigbee_sensors.yaml`. Il est intégré directement dans les cartes Dashboard fournies.
+
+En cliquant dessus, vous forcez le recalcul immédiat des **deux capteurs** :
+- `sensor.z2m_battery_devices` (inventaire et batteries)
+- `sensor.z2m_network_monitor` (appareils silencieux)
+
+Vous pouvez vérifier l'action en observant l'attribut `last_check` qui change à chaque appui.
 
 > [!NOTE]
 > **Après un redémarrage de Home Assistant**, il est normal que beaucoup d'appareils apparaissent en "INCONNU" ou "0%" pendant quelques minutes.
 > C'est le temps que Home Assistant rétablisse la connexion avec tous les capteurs (qui peuvent être en veille).
 > Une fois le système stabilisé, un clic sur le bouton "Actualiser" remettra tout d'équerre.
 
-## 📊 Bonus : Carte Dashboard
-Pour afficher un joli tableau récapitulatif sur votre Dashboard :
-1. Créez une nouvelle carte **"Manuel"**.
-2. Copiez le contenu du fichier `dashboard_card.yaml`.
-3. Vous aurez un tableau avec statut, batterie colorée et date de maintenance.
+## 📊 Cartes Dashboard
+
+Deux cartes sont fournies pour afficher les informations sur votre Dashboard :
+
+### Carte Batteries (`dashboard_card.yaml`)
+Affiche l'état des piles avec alertes et statut de maintenance.
 
 ![Aperçu du Monitoring Zigbee](dashboard_preview.png)
 
+### Carte Réseau (`dashboard_network_card.yaml`)
+Affiche les appareils silencieux et l'activité récente du réseau.
+
+![Aperçu du Moniteur Réseau](moniteur_reseau.png)
+
+**Installation :** Créez une carte **"Manuel"** et collez le contenu du fichier souhaité.
+
 ## 🤖 Automatisation : Rapport Journalier
-Le fichier `zigbee_report.yaml` contient une automation clé en main qui :
-1.  Se déclenche chaque soir (ex: 20h, configurable dans le fichier).
-2.  Vérifie s'il y a des alertes en cours (`sensor.zigbee_battery_alerts > 0`).
-3.  Génère un message sarcastique via le script **K-2SO**.
-4.  Envoie une notification **Discord** détaillée (avec la liste des appareils) et une alerte visuelle sur **Awtrix**.
+
+Deux versions sont disponibles :
+
+| Fichier | Description |
+|---------|-------------|
+| `zigbee_report_simple.yaml` | **Recommandé** - Notification persistante HA (aucune dépendance) |
+| `zigbee_report.yaml` | Version perso avec K-2SO, Discord et Awtrix |
+
+Voir la section [Automation Simplifiée](#-automation-simplifiée-zigbee_report_simpleyaml) pour plus de détails.
 
 ℹ️ *Assurez-vous que ce fichier est bien pris en compte par votre configuration Home Assistant.*
 
@@ -203,6 +227,10 @@ Version sans dépendances externes, utilisant uniquement les **notifications per
 
 1. Copiez le fichier dans votre dossier `automations/` ou collez le contenu dans l'éditeur d'automatisation.
 2. Rechargez les automatisations.
+
+### Aperçu
+
+![Notification persistante](notif.png)
 
 ---
 
