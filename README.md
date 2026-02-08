@@ -45,7 +45,7 @@ Si votre installation Zigbee2MQTT utilise le topic par défaut (`zigbee2mqtt`), 
 
 ## 🛠️ Installation & Configuration
 
-Pour que Home Assistant prenne en compte ce fichier, vous devez l'ajouter à votre configuration. Choisissez **UNE SEULE** des 3 méthodes ci-dessous selon votre architecture actuelle.
+Pour que Home Assistant prenne en compte ce fichier, vous devez l'ajouter à votre configuration. Choisissez **UNE SEULE** des 3 méthodes ci-dessous selon votre architecture actuelle. Je vous conseille la méthode 3.
 
 ### Méthode 1 : Tout dans `configuration.yaml` (Débutant)
 Si vous n'utilisez pas de fichiers séparés, copiez le contenu de `zigbee_sensors.yaml` directement dans `configuration.yaml` sous la clé `template:`.
