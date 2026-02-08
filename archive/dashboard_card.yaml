@@ -1,0 +1,65 @@
+type: vertical-stack
+cards:
+  - type: markdown
+    title: 🔋 État des Piles Zigbee
+    icon: mdi:battery-check
+    content: >
+      *Dernière vérification : {{ state_attr('sensor.z2m_battery_devices', 'last_check') | as_timestamp | timestamp_custom('%d/%m/%Y %H:%M') }}*
+
+      {% set devices = state_attr('sensor.z2m_battery_devices', 'devices') %}
+
+      {% set ns = namespace(alerts=[], ok=[]) %}
+
+      {% for d in devices if devices %}
+        {# FIX V2: Gestion des valeurs ~90/~50/~10 et "unknown" #}
+        {% set bat_str = d.battery | string %}
+        {% set is_unknown = bat_str in ['?', 'unknown', 'unavailable', 'None'] %}
+        {% set bat_val = bat_str | replace('~', '') | float(999) if not is_unknown else 999 %}
+        {% if d.status == 'offline' or is_unknown or (bat_val < 15) %}
+          {% set ns.alerts = ns.alerts + [{'name': d.name, 'bat_display': d.battery if not is_unknown else '?', 'bat_val': bat_val, 'status': d.status, 'maint': d.maintenance}] %}
+        {% else %}
+          {% set ns.ok = ns.ok + [{'name': d.name, 'bat_display': d.battery, 'bat_val': bat_val, 'status': d.status, 'maint': d.maintenance}] %}
+        {% endif %}
+      {% endfor %}
+
+
+      {% if ns.alerts | length > 0 %}
+
+      ### 🚨 À Vérifier ({{ ns.alerts | length }})
+
+      | Appareil | Problème | Batterie | Date |
+
+      | :--- | :--- | :---: | :--- |
+
+      {% for d in ns.alerts | sort(attribute='bat_val') -%}
+
+      | **{{ d.name }}** | {{ '🔴 HORS-LIGNE' if d.status == 'offline' else '⚠️ FAIBLE' if d.bat_val < 15 else '❓ INCONNU' }} | {{ d.bat_display }}% | {{ d.maint }} |
+
+      {% endfor %}
+
+      {% endif %}
+
+
+      ### ✅ Opérationnels ({{ ns.ok | length }})
+
+      | Appareil | Batterie | Maintenance |
+
+      | :--- | :---: | :--- |
+
+      {% for d in ns.ok | sort(attribute='bat_val') -%}
+
+      | {{ d.name }} | 🔋 {{ d.bat_display }}% | {{ d.maint }} |
+
+      {% endfor %}
+  - show_name: true
+    show_icon: false
+    type: button
+    entity: button.actualiser_monitoring_zigbee
+    name: Forcer l'Actualisation
+    icon: mdi:refresh
+    tap_action:
+      action: call-service
+      service: button.press
+      target:
+        entity_id: button.actualiser_monitoring_zigbee
+    show_state: true
