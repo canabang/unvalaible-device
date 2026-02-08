@@ -221,15 +221,20 @@ automation:
         id: network_alert
 
     condition:
-      # Pour les triggers temps réel : ne pas déclencher si state = 0
-      - condition: or
-        conditions:
-          - condition: trigger
-            id: scheduled
-          - condition: template
-            value_template: >
-              {{ states('sensor.zigbee_battery_alerts') | int(0) > 0 or
-                 states('sensor.z2m_network_monitor') | int(0) > 0 }}
+      # Filtre anti-spam : On ne notifie que si ça empire ou si c'est résolu (0)
+      # On ignore les améliorations partielles (ex: 14 -> 13 défauts)
+      - condition: template
+        value_template: >
+          {% if trigger.id == 'scheduled' %}
+            true
+          {% elif trigger.id in ['battery_alert', 'network_alert'] %}
+            {% set from_val = trigger.from_state.state | int(0) %}
+            {% set to_val = trigger.to_state.state | int(0) %}
+            {# On notifie si pire (to > from) OU si tout résolu (to == 0) #}
+            {{ to_val > from_val or to_val == 0 }}
+          {% else %}
+            true
+          {% endif %}
 
     action:
       # Variables communes
