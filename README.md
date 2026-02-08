@@ -24,8 +24,8 @@ Ce projet permet de surveiller l'état de santé de tous vos appareils Zigbee su
 ```
 monitoring-zigbee/
 ├── zigbee_sensors.yaml          # Capteurs (inventaire, alertes, réseau)
-├── dashboard_card.yaml          # Carte dashboard batteries
-├── dashboard_network_card.yaml  # Carte dashboard réseau
+├── dashboard_unified_grid.yaml  # Carte dashboard complète (Grid)
+├── archive/                     # Anciens fichiers (cartes séparées, etc.)
 ├── zigbee_report_simple.yaml    # Automation simplifiée (notification HA)
 ├── zigbee_report.yaml           # Automation perso (K-2SO/Discord/Awtrix)
 ├── debug_templates.md           # Templates de diagnostic
@@ -138,21 +138,22 @@ Vous pouvez vérifier l'action en observant l'attribut `last_check` qui change �
 > C'est le temps que Home Assistant rétablisse la connexion avec tous les capteurs (qui peuvent être en veille).
 > Une fois le système stabilisé, un clic sur le bouton "Actualiser" remettra tout d'équerre.
 
-## 📊 Cartes Dashboard
+### Dashboard Unifié (Vue "Sections")
+Fichier : `dashboard_unified_grid.yaml`
 
-Deux cartes sont fournies pour afficher les informations sur votre Dashboard :
+Cette carte regroupe **Batteries + Réseau + Bouton Actualiser** en une seule grille optimisée.
 
-### Carte Batteries (`dashboard_card.yaml`)
-Affiche l'état des piles avec alertes et statut de maintenance.
+**Installation Spécifique "Vue Sections" :**
+1. Créez une nouvelle Section dans votre dashboard.
+2. Cliquez sur le crayon (Editer) de la section.
+3. Passez en éditeur YAML (souvent via les 3 points ou "Afficher l'éditeur de code").
+4. Collez l'intégralité du contenu de `dashboard_unified_grid.yaml`.
 
-![Aperçu du Monitoring Zigbee](dashboard_preview.png)
 
-### Carte Réseau (`dashboard_network_card.yaml`)
-Affiche les appareils silencieux et l'activité récente du réseau.
+![Démonstration du Dashboard Unifié](/mnt/Data/Github/monitoring-zigbee/dashboard_unified_grid.gif)
 
-![Aperçu du Moniteur Réseau](moniteur_reseau.png)
-
-**Installation :** Créez une carte **"Manuel"** et collez le contenu du fichier souhaité.
+> [!NOTE]
+> Les anciennes cartes séparées (`dashboard_card.yaml`, `dashboard_network_card.yaml`, etc.) ont été déplacées dans le dossier `archive/` pour clarté.
 
 ## 🤖 Automatisation : Rapport Journalier
 
