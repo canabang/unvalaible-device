@@ -59,6 +59,21 @@ template:
               {{ registry }}
             {% endif %}
 
+          # --- QUALITÉ DU SIGNAL (LQI Listener) ---
+          # Stocke le LQI du dernier message reçu
+          lqi_registry: >
+            {% set registry = this.attributes.lqi_registry | default({}) %}
+            {% if trigger.platform == 'mqtt' and not trigger.topic.endswith('bridge/devices') %}
+              {% set dev_name = trigger.topic.split('/')[1] %}
+              {% if trigger.payload_json is defined and trigger.payload_json.linkquality is defined %}
+                {{ dict(registry, **{dev_name: trigger.payload_json.linkquality}) }}
+              {% else %}
+                {{ registry }}
+              {% endif %}
+            {% else %}
+              {{ registry }}
+            {% endif %}
+
           # --- ARBRE DES APPAREILS (Inventory) ---
           raw_devices: >
             {% if trigger.platform == 'mqtt' and trigger.topic.endswith('bridge/devices') %}
@@ -178,6 +193,33 @@ template:
               {% endfor %}
             {% endif %}
             {{ ns.dead | sort(attribute='hours_ago', reverse=True) }}
+
+  # --- CAPTEUR QUALITÉ RÉSEAU (LQI) ---
+  - trigger:
+      - platform: time_pattern
+        minutes: "/15"
+      - platform: state
+        entity_id: input_button.actualiser_monitoring_zigbee_pkg
+    sensor:
+      - name: "Z2M LQI Monitor"
+        unique_id: z2m_lqi_monitor
+        icon: mdi:signal
+        state: "{{ this.attributes.low_lqi_list | count if this.attributes.low_lqi_list is defined else 0 }}"
+        attributes:
+          last_check: "{{ now().isoformat() }}"
+          low_lqi_list: >
+            {% set threshold_lqi = 30 %} 
+            {% set registry = state_attr('sensor.z2m_battery_devices', 'lqi_registry') | default({}) %}
+            {% set ns = namespace(weak=[]) %}
+            
+            {% for name, lqi in registry.items() %}
+               {% if lqi < threshold_lqi %}
+                  {% set ns.weak = ns.weak + [{"name": name, "lqi": lqi}] %}
+               {% endif %}
+            {% endfor %}
+            {{ ns.weak | sort(attribute='lqi') }}
+          low_lqi_count: >
+            {{ this.attributes.low_lqi_list | count if this.attributes.low_lqi_list is defined else 0 }}
 
 # ------------------------------------------------------------------------------
 # 2. BOUTON (Input Button)
