@@ -139,6 +139,52 @@ cards:
           {% endif %}
 
 
+
+          </details>
+      - type: markdown
+        title: 📡 Qualité Signal (LQI)
+        icon: mdi:signal
+        content: >
+          {% set weak = state_attr('sensor.z2m_lqi_monitor', 'low_lqi_list') |
+          default([], true) %}
+
+          {% if weak | length > 0 %}
+
+          ### ⚠️ Signal Faible ({{ weak | length }})
+
+          | Appareil | LQI |
+
+          | :--- | :---: |
+
+          {% for d in weak | sort(attribute='lqi') -%}
+
+          | **{{ d.name }}** | {{ d.lqi }} |
+
+          {% endfor %}
+
+          {% else %}
+
+          ### ✅ Signal Excellent (>30)
+
+          {% endif %}
+
+          <details>
+          <summary>🔍 Voir tous les signaux</summary>
+
+
+          | Appareil | LQI |
+
+          | :--- | :---: |
+
+          {% set registry = state_attr('sensor.z2m_battery_devices', 'lqi_registry') | default({}, true) -%}
+
+          {% for name, lqi in registry.items() | sort(attribute='1') -%}
+
+          | **{{ name }}** | {{ lqi }} |
+
+          {% endfor %}
+
+
           </details>
     columns: 2
     grid_options:
