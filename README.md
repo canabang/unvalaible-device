@@ -102,7 +102,14 @@ Ce capteur analyse `last_seen_registry` pour détecter les appareils "silencieux
 > Sans ce timer, le capteur recalculerait inutilement à chaque message reçu, gaspillant des ressources.
 > Le délai de 15 minutes est un bon compromis entre réactivité et performance.
 
-### 3. Le Capteur d'Alertes (`sensor.zigbee_battery_alerts`)
+### 3. Le Capteur Qualité Signal (`sensor.z2m_lqi_monitor`)
+Ce capteur analyse la qualité du signal (LQI - Link Quality Indication) de chaque appareil qui communique.
+
+- **Seuil "faible"** : `< 30` (configurable dans le code).
+- **Mise à jour** : Toutes les 15 minutes.
+- **But** : Affichage visuel uniquement dans le Dashboard (pas d'alerte).
+
+### 4. Le Capteur d'Alertes (`sensor.zigbee_battery_alerts`)
 Ce capteur filtre la liste du capteur maître pour ne sortir que les appareils nécessitant une intervention humaine.
 
 **Critères d'alerte :**
